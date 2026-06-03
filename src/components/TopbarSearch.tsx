@@ -71,11 +71,13 @@ export function TopbarSearch() {
       const allLists = await Promise.all(
         devices.map(async (device) => {
           try {
-            const { data } = await api.get<InstalledApp[]>(`/devices/${device.id}/apps`, {
+            // Updated to handle { apps: [], total: number }
+            const response = await api.get<{ apps: InstalledApp[] }>(`/devices/${device.id}/apps`, {
               params: { search: trimmed }
             });
-            return data.map(app => ({ ...app, deviceId: device.id }));
-          } catch {
+            return (response.data.apps ?? []).map(app => ({ ...app, deviceId: device.id }));
+          } catch (e) {
+            console.error('Failed to fetch apps for device', device.id, e);
             return [];
           }
         }),
@@ -84,10 +86,19 @@ export function TopbarSearch() {
     },
   });
 
+
+
+  const deviceMap = useMemo(() => {
+    const map = new Map<string, Device>();
+    devices.forEach((d) => map.set(d.id, d));
+    return map;
+  }, [devices]);
+
+  const hasMultipleDevices = devices.length > 1;
+
   const appResults = useMemo(() => {
     if (!trimmed) return [];
     const results = appsQueries.data ?? [];
-    console.log('TopbarSearch - appResults:', results);
     return results;
   }, [appsQueries.data, trimmed]);
 
@@ -236,22 +247,27 @@ export function TopbarSearch() {
               ) : null}
               {appResults.length > 0 ? (
                 <ResultGroup icon={AppWindow} title={`Aplicativos (${appResults.length})`}>
-                  {appResults.map((app) => (
-                    <Link
-                      className="flex items-center justify-between gap-3 rounded-xl px-3 py-2 transition hover:bg-[#f1faf4]"
-                      key={`${app.id}-${app.packageName}`}
-                      onClick={() => setOpen(false)}
-                      to={`/device/${app.deviceId}?tab=apps`}
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-[#06120c]">{app.appName}</p>
-                        <p className="truncate text-xs text-[#7d8b83]">{app.packageName}</p>
-                      </div>
-                      <span className="rounded-full bg-[#edf4ef] px-2 py-0.5 text-[11px] font-semibold text-[#10673d]">
-                        App
-                      </span>
-                    </Link>
-                  ))}
+                  {appResults.map((app) => {
+                    const device = deviceMap.get(app.deviceId);
+                    return (
+                      <Link
+                        className="flex items-center justify-between gap-3 rounded-xl px-3 py-2 transition hover:bg-[#f1faf4]"
+                        key={`${app.id}-${app.packageName}`}
+                        onClick={() => setOpen(false)}
+                        to={`/device/${app.deviceId}?tab=apps`}
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-[#06120c]">{app.appName}</p>
+                          <p className="truncate text-xs text-[#7d8b83]">
+                            {hasMultipleDevices ? (device?.childName || device?.deviceName) : app.packageName}
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-[#edf4ef] px-2 py-0.5 text-[11px] font-semibold text-[#10673d]">
+                          {hasMultipleDevices && device ? device.deviceName : 'App'}
+                        </span>
+                      </Link>
+                    );
+                  })}
                 </ResultGroup>
               ) : null}
               {alertResults.length > 0 ? (

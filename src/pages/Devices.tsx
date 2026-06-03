@@ -199,9 +199,15 @@ export function Devices() {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Filter size={14} className="text-[#5c6b62]" />
+              <span className="text-sm font-medium text-[#5c6b62]">Plataforma</span>
               <Select value={platform} onValueChange={(v) => setPlatform(v as PlatformFilter)}>
                 <SelectTrigger className="w-[130px]">
-                  <SelectValue placeholder="Plataforma" />
+                  <SelectValue placeholder="Plataforma">
+                    {(value: string | null) => {
+                      if (!value) return 'Plataforma';
+                      return { all: 'Todas', android: 'Android', ios: 'iOS' }[value] ?? value;
+                    }}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas</SelectItem>
@@ -209,9 +215,15 @@ export function Devices() {
                   <SelectItem value="ios">iOS</SelectItem>
                 </SelectContent>
               </Select>
+              <span className="text-sm font-medium text-[#5c6b62]">Status</span>
               <Select value={status} onValueChange={(v) => setStatus(v as StatusFilter)}>
                 <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Status" />
+                  <SelectValue placeholder="Status">
+                    {(value: string | null) => {
+                      if (!value) return 'Status';
+                      return { all: 'Todos', paired: 'Pareados', pending: 'Pendentes', blocked: 'Internet bloqueada' }[value] ?? value;
+                    }}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>

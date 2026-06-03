@@ -20,6 +20,13 @@ import {
 } from 'lucide-react';
 import api from '../services/api';
 import { DashboardLayout } from '../components/DashboardLayout';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../components/ui/select';
 
 interface Device {
   id: string;
@@ -627,33 +634,51 @@ export function DeviceDetail() {
               );
             })()}
             <div className="mb-4 grid gap-3 md:grid-cols-[140px_140px_140px]">
-              <select
-                className="h-11 rounded-xl border border-[#dfe6df] bg-white px-3 text-sm text-[#06120c] outline-none focus:border-[#10673d]"
-                onChange={(event) => { setAppStatus(event.target.value as 'all' | 'blocked' | 'unblocked'); setPage(1); }}
-                value={appStatus}
-              >
-                <option value="all">Todos os status</option>
-                <option value="blocked">Bloqueados</option>
-                <option value="unblocked">Liberados</option>
-              </select>
-              <select
-                className="h-11 rounded-xl border border-[#dfe6df] bg-white px-3 text-sm text-[#06120c] outline-none focus:border-[#10673d]"
-                onChange={(event) => { setAppSystemFilter(event.target.value as 'all' | 'system' | 'user'); setPage(1); }}
-                value={appSystemFilter}
-              >
-                <option value="all">Todos os tipos</option>
-                <option value="user">Aplicativos de usuário</option>
-                <option value="system">Aplicativos de sistema</option>
-              </select>
-              <select
-                className="h-11 rounded-xl border border-[#dfe6df] bg-white px-3 text-sm text-[#06120c] outline-none focus:border-[#10673d]"
-                onChange={(event) => { setLimit(Number(event.target.value)); setPage(1); }}
-                value={limit}
-              >
-                <option value="10">10 por página</option>
-                <option value="20">20 por página</option>
-                <option value="50">50 por página</option>
-              </select>
+              <Select value={appStatus} onValueChange={(v) => { setAppStatus(v as 'all' | 'blocked' | 'unblocked'); setPage(1); }}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Todos os status">
+                    {(value: string | null) => {
+                      if (!value) return 'Todos os status';
+                      return { all: 'Todos os status', blocked: 'Bloqueados', unblocked: 'Liberados' }[value] ?? value;
+                    }}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os status</SelectItem>
+                  <SelectItem value="blocked">Bloqueados</SelectItem>
+                  <SelectItem value="unblocked">Liberados</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={appSystemFilter} onValueChange={(v) => { setAppSystemFilter(v as 'all' | 'system' | 'user'); setPage(1); }}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Todos os tipos">
+                    {(value: string | null) => {
+                      if (!value) return 'Todos os tipos';
+                      return { all: 'Todos os tipos', system: 'Sistema', user: 'Usuário' }[value] ?? value;
+                    }}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os tipos</SelectItem>
+                  <SelectItem value="user">Aplicativos de usuário</SelectItem>
+                  <SelectItem value="system">Aplicativos de sistema</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={String(limit)} onValueChange={(v) => { setLimit(Number(v)); setPage(1); }}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="10 por página">
+                    {(value: string | null) => {
+                      if (!value) return '10 por página';
+                      return { '10': '10 por página', '20': '20 por página', '50': '50 por página' }[value] ?? value;
+                    }}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10 por página</SelectItem>
+                  <SelectItem value="20">20 por página</SelectItem>
+                  <SelectItem value="50">50 por página</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             {globalAppSearch.trim().length > 0 ? (
               <p className="mb-3 text-sm text-[#7d8b83]">
