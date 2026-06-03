@@ -1,0 +1,4 @@
+interface:
+  display_name: "Modern Dashboard Web Apps"
+  short_description: "Build polished dashboard web apps"
+  default_prompt: "Use $modern-dashboard-webapps to build a polished analytics dashboard web app."

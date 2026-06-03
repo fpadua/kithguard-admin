@@ -1,0 +1,4 @@
+interface:
+  display_name: "Modern Landing Pages"
+  short_description: "Build polished modern landing pages"
+  default_prompt: "Use $modern-landing-pages to build a polished, responsive landing page."
