@@ -14,6 +14,7 @@ import {
   Pencil,
   RadioTower,
   Trash2,
+  Lock,
   Wifi,
   WifiOff,
   X,
@@ -108,7 +109,7 @@ interface GeofenceDraft {
 const tabs = [
   { id: 'location', label: 'Localização' },
   { id: 'apps', label: 'Apps' },
-  { id: 'internet', label: 'Internet' },
+  { id: 'internet', label: 'Bloqueios' },
   { id: 'history', label: 'Histórico' },
   { id: 'geofence', label: 'Geofence' },
   { id: 'reports', label: 'Relatórios' },
@@ -307,6 +308,25 @@ export function DeviceDetail() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['internet-access', id] });
+      queryClient.invalidateQueries({ queryKey: ['devices'] });
+    },
+  });
+
+  const screenQuery = useQuery<InternetAccess>({
+    enabled: Boolean(id),
+    queryKey: ['screen-access', id],
+    queryFn: async () => {
+      const { data } = await api.get(`/devices/${id}/screen-access`);
+      return data;
+    },
+  });
+
+  const screenMutation = useMutation({
+    mutationFn: async (blocked: boolean) => {
+      await api.post(`/devices/${id}/screen-access`, { blocked });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['screen-access', id] });
       queryClient.invalidateQueries({ queryKey: ['devices'] });
     },
   });
@@ -808,25 +828,122 @@ export function DeviceDetail() {
         {activeTab === 'internet' ? (
           <Panel>
             <SectionTitle
-              title="Bloqueio de internet"
-              text="Controle o status consumido pelo app filho em /devices/by-identifier/:deviceIdentifier/internet-access."
+              title="Bloqueios"
+              text="Ative ou desative bloqueios de internet e tela no dispositivo da criança."
             />
-            <div className="rounded-2xl bg-[#06120c] p-6 text-white">
-              <p className="text-sm text-white/70">Status atual</p>
-              <p className="mt-2 flex items-center gap-3 text-4xl font-bold">
-                {internetQuery.data?.blocked ? <WifiOff size={32} /> : <Wifi size={32} />}
-                {internetQuery.data?.blocked ? 'Bloqueada' : 'Liberada'}
-              </p>
-              <label className="mt-6 flex max-w-md items-center justify-between rounded-full bg-white/10 px-5 py-4">
-                <span className="font-semibold">Bloquear acesso à internet</span>
-                <input
-                  checked={Boolean(internetQuery.data?.blocked)}
-                  className="h-6 w-6 accent-[#63c58b]"
-                  disabled={internetMutation.isPending}
-                  onChange={(event) => internetMutation.mutate(event.target.checked)}
-                  type="checkbox"
-                />
-              </label>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              {/* Bloqueio de Internet */}
+              <div className="rounded-2xl border border-[#e8ece8] bg-white p-5">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className={`grid h-10 w-10 place-items-center rounded-full ${
+                      internetQuery.data?.blocked
+                        ? 'bg-red-50 text-red-600'
+                        : 'bg-[#f1faf4] text-[#10673d]'
+                    }`}>
+                      {internetQuery.data?.blocked ? <WifiOff size={18} /> : <Wifi size={18} />}
+                    </span>
+                    <div>
+                      <p className="font-semibold text-[#06120c]">Internet</p>
+                      <p className="text-xs text-[#7d8b83]">
+                        Acesso à rede
+                      </p>
+                    </div>
+                  </div>
+                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                    internetQuery.data?.blocked
+                      ? 'bg-red-50 text-red-600'
+                      : 'bg-[#edf4ef] text-[#10673d]'
+                  }`}>
+                    {internetQuery.data?.blocked ? 'Bloqueada' : 'Liberada'}
+                  </span>
+                </div>
+                <label className="mt-4 flex items-center justify-between rounded-xl bg-[#f7f9f7] px-4 py-3">
+                  <span className="text-sm font-medium text-[#46574d]">Bloquear internet</span>
+                  <button
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      internetQuery.data?.blocked ? 'bg-red-500' : 'bg-[#d7ded7]'
+                    }`}
+                    disabled={internetMutation.isPending}
+                    onClick={() => internetMutation.mutate(!internetQuery.data?.blocked)}
+                    role="switch"
+                    aria-checked={Boolean(internetQuery.data?.blocked)}
+                    type="button"
+                  >
+                    <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${
+                      internetQuery.data?.blocked ? 'translate-x-[22px]' : 'translate-x-[2px]'
+                    }`} />
+                  </button>
+                </label>
+                {internetQuery.data?.blocked ? (
+                  <p className="mt-3 flex items-center gap-1.5 text-xs text-[#7d8b83]">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-red-400" />
+                    A criança não conseguirá acessar a internet neste dispositivo.
+                  </p>
+                ) : (
+                  <p className="mt-3 flex items-center gap-1.5 text-xs text-[#7d8b83]">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#63c58b]" />
+                    Internet liberada para todos os aplicativos.
+                  </p>
+                )}
+              </div>
+
+              {/* Bloqueio de Tela */}
+              <div className="rounded-2xl border border-[#e8ece8] bg-white p-5">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className={`grid h-10 w-10 place-items-center rounded-full ${
+                      screenQuery.data?.blocked
+                        ? 'bg-red-50 text-red-600'
+                        : 'bg-[#f1faf4] text-[#10673d]'
+                    }`}>
+                      <Lock size={18} />
+                    </span>
+                    <div>
+                      <p className="font-semibold text-[#06120c]">Tela</p>
+                      <p className="text-xs text-[#7d8b83]">
+                        Bloqueio total do dispositivo
+                      </p>
+                    </div>
+                  </div>
+                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                    screenQuery.data?.blocked
+                      ? 'bg-red-50 text-red-600'
+                      : 'bg-[#edf4ef] text-[#10673d]'
+                  }`}>
+                    {screenQuery.data?.blocked ? 'Bloqueada' : 'Liberada'}
+                  </span>
+                </div>
+                <label className="mt-4 flex items-center justify-between rounded-xl bg-[#f7f9f7] px-4 py-3">
+                  <span className="text-sm font-medium text-[#46574d]">Bloquear tela</span>
+                  <button
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                      screenQuery.data?.blocked ? 'bg-red-500' : 'bg-[#d7ded7]'
+                    }`}
+                    disabled={screenMutation.isPending}
+                    onClick={() => screenMutation.mutate(!screenQuery.data?.blocked)}
+                    role="switch"
+                    aria-checked={Boolean(screenQuery.data?.blocked)}
+                    type="button"
+                  >
+                    <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${
+                      screenQuery.data?.blocked ? 'translate-x-[22px]' : 'translate-x-[2px]'
+                    }`} />
+                  </button>
+                </label>
+                {screenQuery.data?.blocked ? (
+                  <p className="mt-3 flex items-center gap-1.5 text-xs text-[#7d8b83]">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-red-400" />
+                    A criança não conseguirá usar o celular até que você libere.
+                  </p>
+                ) : (
+                  <p className="mt-3 flex items-center gap-1.5 text-xs text-[#7d8b83]">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#63c58b]" />
+                    Tela livre. A criança pode usar o dispositivo normalmente.
+                  </p>
+                )}
+              </div>
             </div>
           </Panel>
         ) : null}
