@@ -1,3 +1,4 @@
+import { Combobox } from '../components/ui/combobox';
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -1162,32 +1163,20 @@ export function DeviceDetail() {
                 );
               }}
             >
+
               <label className="grid min-w-0 gap-1 text-sm text-[#46574d] md:col-span-6">
                 <span className="font-medium">App</span>
-                <select
-                  className="h-11 w-full min-w-0 max-w-full truncate rounded-xl border border-[#dfe6df] bg-white px-3 text-sm"
-                  onChange={(event) =>
-                    setScheduleForm((form) => ({ ...form, packageName: event.target.value }))
-                  }
+                <Combobox
+                  options={allApps.map((app) => ({ label: app.appName, value: app.packageName }))}
                   value={scheduleForm.packageName}
-                >
-                  <option value="">Selecione um app…</option>
-                  {allApps.map((app) => (
-                    <option key={app.packageName} value={app.packageName}>
-                      {app.appName}
-                    </option>
-                  ))}
-                </select>
-                {scheduleForm.packageName ? (
-                  <span
-                    className="truncate text-xs text-[#7d8b83]"
-                    title={scheduleForm.packageName}
-                  >
-                    {scheduleForm.packageName}
-                  </span>
-                ) : null}
+                  onChange={(value) =>
+                    setScheduleForm((form) => ({ ...form, packageName: value }))
+                  }
+                  placeholder="Selecione um app…"
+                />
+                
               </label>
-              <label className="grid min-w-0 gap-1 text-sm text-[#46574d] sm:col-span-1 md:col-span-3">
+              <label className="grid min-w-0 gap-1 text-sm text-[#46574d] sm:col-span-1 md:col-span-2">
                 <span className="font-medium">Início</span>
                 <input
                   className="h-11 w-full min-w-0 rounded-xl border border-[#dfe6df] bg-white px-3 text-sm"
@@ -1199,7 +1188,7 @@ export function DeviceDetail() {
                   value={scheduleForm.startTime}
                 />
               </label>
-              <label className="grid min-w-0 gap-1 text-sm text-[#46574d] sm:col-span-1 md:col-span-3">
+              <label className="grid min-w-0 gap-1 text-sm text-[#46574d] sm:col-span-1 md:col-span-2">
                 <span className="font-medium">Fim</span>
                 <input
                   className="h-11 w-full min-w-0 rounded-xl border border-[#dfe6df] bg-white px-3 text-sm"
@@ -1212,7 +1201,7 @@ export function DeviceDetail() {
                 />
               </label>
               <button
-                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[#10673d] px-5 text-sm font-semibold text-white transition hover:bg-[#0d5532] disabled:opacity-60 sm:col-span-2 md:col-span-12 md:mt-1 md:w-auto md:self-end"
+                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[#10673d] px-5 text-sm font-semibold text-white transition hover:bg-[#0d5532] disabled:opacity-60 sm:col-span-2 md:col-span-2 md:mt-1 md:h-9 md:w-auto md:self-end"
                 disabled={
                   createScheduleMutation.isPending ||
                   !scheduleForm.packageName ||

@@ -20,7 +20,7 @@ interface ApiNotification {
   created_at?: string;
 }
 
-const ALLOWED_TYPES: NotificationType[] = ['geofence', 'app', 'internet', 'pairing', 'system'];
+const ALLOWED_TYPES: NotificationType[] = ['geofence', 'app', 'internet', 'pairing', 'screen', 'system'];
 
 function normalizeType(value: string): NotificationType {
   return (ALLOWED_TYPES as string[]).includes(value) ? (value as NotificationType) : 'system';
@@ -43,6 +43,7 @@ const notificationTypeStyles: Record<NotificationType, { dot: string; label: str
   app: { dot: 'bg-[#d97706]', label: 'Apps' },
   internet: { dot: 'bg-[#2563eb]', label: 'Internet' },
   pairing: { dot: 'bg-[#7c3aed]', label: 'Pareamento' },
+  screen: { dot: 'bg-[#db2777]', label: 'Tela' },
   system: { dot: 'bg-[#475569]', label: 'Sistema' },
 };
 
@@ -77,7 +78,9 @@ export function TopbarInbox() {
         return data;
       },
       enabled: Boolean(device.id),
-      staleTime: 30_000,
+      staleTime: 15_000,
+      refetchInterval: 30_000,
+      refetchOnWindowFocus: true,
     })),
   });
 

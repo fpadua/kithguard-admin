@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import api from '../services/api';
 
-export type NotificationType = 'geofence' | 'app' | 'internet' | 'pairing' | 'system';
+export type NotificationType = 'geofence' | 'app' | 'internet' | 'pairing' | 'screen' | 'system';
 
 export interface NotificationItem {
   id: string;
