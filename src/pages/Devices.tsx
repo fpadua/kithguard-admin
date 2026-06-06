@@ -37,6 +37,9 @@ interface Device {
   platform: string;
   deviceIdentifier?: string | null;
   internetBlocked?: boolean;
+  batteryLevel?: number;
+  isCharging?: boolean;
+  locationPriority?: 'high' | 'balanced' | 'low';
   createdAt?: string;
   parentEmail?: string | null;
   parentName?: string | null;
@@ -88,6 +91,15 @@ export function Devices() {
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       await api.delete(`/devices/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['devices'] });
+    },
+  });
+
+  const priorityMutation = useMutation({
+    mutationFn: async ({ id, priority }: { id: string; priority: 'high' | 'balanced' | 'low' }) => {
+      await api.patch(`/devices/${id}/settings`, { locationPriority: priority });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['devices'] });
@@ -250,7 +262,9 @@ export function Devices() {
               filteredDevices.map((device) => (
                 <DeviceRow
                   device={device}
+                  isUpdatingPriority={priorityMutation.isPending && priorityMutation.variables?.id === device.id}
                   key={device.id}
+                  onChangePriority={(priority) => priorityMutation.mutate({ id: device.id, priority })}
                   onDelete={() => deleteMutation.mutate(device.id)}
                   onToggleInternet={() =>
                     internetMutation.mutate({ id: device.id, blocked: !device.internetBlocked })
@@ -267,13 +281,18 @@ export function Devices() {
 
 function DeviceRow({
   device,
+  isUpdatingPriority,
+  onChangePriority,
   onToggleInternet,
   onDelete,
 }: {
   device: Device;
+  isUpdatingPriority: boolean;
+  onChangePriority: (priority: 'high' | 'balanced' | 'low') => void;
   onToggleInternet: () => void;
   onDelete: () => void;
 }) {
+  const priority = device.locationPriority ?? 'balanced';
   return (
     <div className="grid gap-4 rounded-xl border border-[#e8ece8] p-4 transition hover:border-[#10673d] hover:bg-[#fbfffb] md:grid-cols-[1fr_auto]">
       <div className="min-w-0">
@@ -291,12 +310,34 @@ function DeviceRow({
           <span className="flex items-center gap-1 rounded-full bg-[#f4f4f1] px-3 py-1">
             <MapPin size={12} /> {formatDate(device.createdAt)}
           </span>
-          <span className="flex items-center gap-1 rounded-full bg-[#f4f4f1] px-3 py-1">
-            <Battery size={12} /> Status ativo
-          </span>
+          {typeof device.batteryLevel === 'number' && (
+            <span className="flex items-center gap-1 rounded-full bg-[#f4f4f1] px-3 py-1">
+              {device.isCharging ? <BatteryCharging size={12} /> : <Battery size={12} />}
+              {device.batteryLevel}% {device.isCharging ? '(Carregando)' : ''}
+            </span>
+          )}
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2 md:justify-end">
+        <Select
+          value={priority}
+          onValueChange={(v) => onChangePriority(v as 'high' | 'balanced' | 'low')}
+          disabled={isUpdatingPriority}
+        >
+          <SelectTrigger className="w-[170px]" aria-label="Precisão de localização">
+            <SelectValue placeholder="Precisão">
+              {(value: string | null) => {
+                if (!value) return 'Precisão';
+                return { high: 'Alta precisão', balanced: 'Balanceado', low: 'Econômica' }[value] ?? value;
+              }}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="high">Alta precisão</SelectItem>
+            <SelectItem value="balanced">Balanceado</SelectItem>
+            <SelectItem value="low">Econômica</SelectItem>
+          </SelectContent>
+        </Select>
         <Link
           className="flex h-10 items-center gap-2 rounded-full bg-[#10673d] px-4 text-sm font-semibold text-white transition hover:bg-[#0d5532]"
           to={`/device/${device.id}`}

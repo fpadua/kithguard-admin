@@ -5,6 +5,8 @@ import {
   Activity,
   AlertTriangle,
   AppWindow,
+  Battery,
+  BatteryCharging,
   Bell,
   Check,
   CheckCircle2,
@@ -12,6 +14,7 @@ import {
   Loader2,
   MapPin,
   Pencil,
+  Plus,
   RadioTower,
   Trash2,
   Lock,
@@ -36,6 +39,9 @@ interface Device {
   platform: string;
   deviceIdentifier?: string | null;
   internetBlocked?: boolean;
+  batteryLevel?: number;
+  isCharging?: boolean;
+  locationPriority?: 'high' | 'balanced' | 'low';
   createdAt?: string;
   parentEmail?: string | null;
   parentName?: string | null;
@@ -95,6 +101,52 @@ interface NotificationRow {
 
 interface InternetAccess {
   blocked: boolean;
+}
+
+interface DeviceSettings {
+  locationPriority: 'high' | 'balanced' | 'low';
+  internetBlocked: boolean;
+  screenBlocked: boolean;
+}
+
+interface BlockSchedule {
+  id: string;
+  deviceId: string;
+  packageName: string;
+  startTime: string;
+  endTime: string;
+  daysOfWeek: string;
+  enabled: boolean;
+  createdAt: string;
+}
+
+const ALL_DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'] as const;
+type DayCode = (typeof ALL_DAYS)[number];
+
+const DAY_LABELS: Record<DayCode, string> = {
+  MON: 'Seg',
+  TUE: 'Ter',
+  WED: 'Qua',
+  THU: 'Qui',
+  FRI: 'Sex',
+  SAT: 'Sáb',
+  SUN: 'Dom',
+};
+
+function parseDaysOfWeek(value: string): DayCode[] {
+  if (value === '*') return [...ALL_DAYS];
+  return value
+    .split(',')
+    .map((d) => d.trim().toUpperCase())
+    .filter((d): d is DayCode => (ALL_DAYS as readonly string[]).includes(d));
+}
+
+function formatDaysOfWeek(value: string): string {
+  const days = parseDaysOfWeek(value);
+  if (days.length === 7) return 'Todos os dias';
+  if (days.length === 5 && !days.includes('SAT') && !days.includes('SUN')) return 'Seg–Sex';
+  if (days.length === 2 && days.includes('SAT') && days.includes('SUN')) return 'Fim de semana';
+  return days.map((d) => DAY_LABELS[d]).join(', ');
 }
 
 interface GeofenceDraft {
@@ -166,6 +218,18 @@ export function DeviceDetail() {
   });
   const [isEditingDeviceName, setIsEditingDeviceName] = useState(false);
   const [editedDeviceName, setEditedDeviceName] = useState('');
+
+  const [scheduleForm, setScheduleForm] = useState<{
+    packageName: string;
+    startTime: string;
+    endTime: string;
+    daysOfWeek: DayCode[];
+  }>({
+    packageName: '',
+    startTime: '22:00',
+    endTime: '06:00',
+    daysOfWeek: [...ALL_DAYS],
+  });
   const deviceNameInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -207,6 +271,19 @@ export function DeviceDetail() {
   const totalApps = appsQuery.data?.total ?? 0;
   const totalPages = Math.ceil(totalApps / limit);
 
+  // Full app list (no pagination) used by the schedule form dropdown.
+  // Backend caps `limit` at 500; sorting by name makes the list predictable.
+  const allAppsQuery = useQuery<{ apps: InstalledApp[]; total: number }>({
+    enabled: Boolean(id),
+    queryKey: ['device-apps-all', id],
+    queryFn: async () => {
+      const { data } = await api.get(`/devices/${id}/apps`, { params: { limit: 500, offset: 0 } });
+      return data;
+    },
+    staleTime: 30_000,
+  });
+  const allApps = allAppsQuery.data?.apps ?? [];
+
   const blockedAppsQuery = useQuery<string[]>({
     enabled: Boolean(id),
     queryKey: ['blocked-apps', id],
@@ -222,6 +299,61 @@ export function DeviceDetail() {
     queryFn: async () => {
       const { data } = await api.get(`/devices/${id}/internet-access`);
       return data;
+    },
+  });
+
+  const settingsQuery = useQuery<DeviceSettings>({
+    enabled: Boolean(id),
+    queryKey: ['device-settings', id],
+    queryFn: async () => {
+      const { data } = await api.get(`/devices/${id}/settings`);
+      return data;
+    },
+  });
+
+  const updatePriorityMutation = useMutation({
+    mutationFn: async (priority: 'high' | 'balanced' | 'low') => {
+      await api.patch(`/devices/${id}/settings`, { locationPriority: priority });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['device-settings', id] });
+      queryClient.invalidateQueries({ queryKey: ['devices'] });
+    },
+  });
+
+  const schedulesQuery = useQuery<BlockSchedule[]>({
+    enabled: Boolean(id),
+    queryKey: ['device-schedules', id],
+    queryFn: async () => {
+      const { data } = await api.get(`/devices/${id}/schedules`);
+      return data;
+    },
+  });
+
+  const createScheduleMutation = useMutation({
+    mutationFn: async (input: { packageName: string; startTime: string; endTime: string; daysOfWeek: string }) => {
+      await api.post(`/devices/${id}/schedules`, input);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['device-schedules', id] });
+    },
+  });
+
+  const deleteScheduleMutation = useMutation({
+    mutationFn: async (scheduleId: string) => {
+      await api.delete(`/devices/${id}/schedules/${scheduleId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['device-schedules', id] });
+    },
+  });
+
+  const toggleScheduleMutation = useMutation({
+    mutationFn: async ({ scheduleId, enabled }: { scheduleId: string; enabled: boolean }) => {
+      await api.patch(`/devices/${id}/schedules/${scheduleId}`, { enabled });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['device-schedules', id] });
     },
   });
 
@@ -508,6 +640,12 @@ export function DeviceDetail() {
                 </button>
               )}
               <span>· {device?.platform ?? 'android'}</span>
+              {typeof device?.batteryLevel === 'number' && (
+                <span className="flex items-center gap-1">
+                  · {device.isCharging ? <BatteryCharging size={14} /> : <Battery size={14} />}
+                  {device.batteryLevel}% {device.isCharging ? '(Carregando)' : ''}
+                </span>
+              )}
               <span>· {device?.deviceIdentifier ? 'pareado' : 'aguardando pareamento'}</span>
             </div>
             <p className="mt-1 text-sm text-[#7d8b83]">
@@ -556,6 +694,7 @@ export function DeviceDetail() {
         ) : null}
 
         {activeTab === 'location' ? (
+          <>
           <Panel>
             <SectionTitle
               title="Localização em tempo real"
@@ -590,6 +729,49 @@ export function DeviceDetail() {
               </div>
             </div>
           </Panel>
+
+          <Panel>
+            <SectionTitle
+              title="Precisão da localização"
+              text="Escolha o nível de precisão do GPS. Aplicações mais altas usam mais bateria."
+            />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm text-[#5c6b62]">
+                Modo atual:{' '}
+                <span className="font-semibold text-[#06120c]">
+                  {settingsQuery.data?.locationPriority === 'high'
+                    ? 'Alta precisão'
+                    : settingsQuery.data?.locationPriority === 'low'
+                      ? 'Econômica'
+                      : 'Balanceado'}
+                </span>
+                {updatePriorityMutation.isPending ? ' · salvando…' : null}
+                {updatePriorityMutation.isError ? ' · erro ao salvar' : null}
+              </div>
+              <div className="w-full sm:w-[260px]">
+                <Select
+                  value={settingsQuery.data?.locationPriority ?? 'balanced'}
+                  onValueChange={(v) => updatePriorityMutation.mutate(v as 'high' | 'balanced' | 'low')}
+                  disabled={updatePriorityMutation.isPending || settingsQuery.isLoading}
+                >
+                  <SelectTrigger aria-label="Precisão de localização">
+                    <SelectValue placeholder="Selecione a precisão">
+                      {(value: string | null) => {
+                        if (!value) return 'Selecione a precisão';
+                        return { high: 'Alta precisão', balanced: 'Balanceado', low: 'Econômica' }[value] ?? value;
+                      }}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="high">Alta precisão</SelectItem>
+                    <SelectItem value="balanced">Balanceado</SelectItem>
+                    <SelectItem value="low">Econômica</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </Panel>
+          </>
         ) : null}
 
         {activeTab === 'apps' ? (
@@ -826,6 +1008,7 @@ export function DeviceDetail() {
         ) : null}
 
         {activeTab === 'internet' ? (
+          <>
           <Panel>
             <SectionTitle
               title="Bloqueios"
@@ -946,6 +1129,248 @@ export function DeviceDetail() {
               </div>
             </div>
           </Panel>
+
+          <Panel>
+            <SectionTitle
+              title="Agendamento de bloqueios de apps"
+              text="Defina horários em que um app específico fica bloqueado (ex: redes sociais das 22h às 06h)."
+            />
+
+            <form
+              className="mb-4 grid gap-3 rounded-2xl border border-[#e8ece8] bg-white p-3 sm:p-4 md:grid-cols-12"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const pkg = scheduleForm.packageName.trim();
+                if (!pkg) return;
+                if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(scheduleForm.startTime)) return;
+                if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(scheduleForm.endTime)) return;
+                const sortedDays = [...scheduleForm.daysOfWeek].sort(
+                  (a, b) => ALL_DAYS.indexOf(a) - ALL_DAYS.indexOf(b)
+                );
+                createScheduleMutation.mutate(
+                  {
+                    packageName: pkg,
+                    startTime: scheduleForm.startTime,
+                    endTime: scheduleForm.endTime,
+                    daysOfWeek: sortedDays.length === 7 ? '*' : sortedDays.join(','),
+                  },
+                  {
+                    onSuccess: () => {
+                      setScheduleForm((form) => ({ ...form, packageName: '' }));
+                    },
+                  }
+                );
+              }}
+            >
+              <label className="grid min-w-0 gap-1 text-sm text-[#46574d] md:col-span-6">
+                <span className="font-medium">App</span>
+                <select
+                  className="h-11 w-full min-w-0 max-w-full truncate rounded-xl border border-[#dfe6df] bg-white px-3 text-sm"
+                  onChange={(event) =>
+                    setScheduleForm((form) => ({ ...form, packageName: event.target.value }))
+                  }
+                  value={scheduleForm.packageName}
+                >
+                  <option value="">Selecione um app…</option>
+                  {allApps.map((app) => (
+                    <option key={app.packageName} value={app.packageName}>
+                      {app.appName}
+                    </option>
+                  ))}
+                </select>
+                {scheduleForm.packageName ? (
+                  <span
+                    className="truncate text-xs text-[#7d8b83]"
+                    title={scheduleForm.packageName}
+                  >
+                    {scheduleForm.packageName}
+                  </span>
+                ) : null}
+              </label>
+              <label className="grid min-w-0 gap-1 text-sm text-[#46574d] sm:col-span-1 md:col-span-3">
+                <span className="font-medium">Início</span>
+                <input
+                  className="h-11 w-full min-w-0 rounded-xl border border-[#dfe6df] bg-white px-3 text-sm"
+                  onChange={(event) =>
+                    setScheduleForm((form) => ({ ...form, startTime: event.target.value }))
+                  }
+                  pattern="^([01]\\d|2[0-3]):[0-5]\\d$"
+                  type="time"
+                  value={scheduleForm.startTime}
+                />
+              </label>
+              <label className="grid min-w-0 gap-1 text-sm text-[#46574d] sm:col-span-1 md:col-span-3">
+                <span className="font-medium">Fim</span>
+                <input
+                  className="h-11 w-full min-w-0 rounded-xl border border-[#dfe6df] bg-white px-3 text-sm"
+                  onChange={(event) =>
+                    setScheduleForm((form) => ({ ...form, endTime: event.target.value }))
+                  }
+                  pattern="^([01]\\d|2[0-3]):[0-5]\\d$"
+                  type="time"
+                  value={scheduleForm.endTime}
+                />
+              </label>
+              <button
+                className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-[#10673d] px-5 text-sm font-semibold text-white transition hover:bg-[#0d5532] disabled:opacity-60 sm:col-span-2 md:col-span-12 md:mt-1 md:w-auto md:self-end"
+                disabled={
+                  createScheduleMutation.isPending ||
+                  !scheduleForm.packageName ||
+                  scheduleForm.daysOfWeek.length === 0
+                }
+                type="submit"
+              >
+                {createScheduleMutation.isPending ? (
+                  <Loader2 className="animate-spin" size={14} />
+                ) : (
+                  <Plus size={14} />
+                )}
+                Adicionar
+              </button>
+
+              <div className="col-span-full flex flex-wrap items-center gap-2 text-sm text-[#46574d]">
+                <span className="font-medium">Dias:</span>
+                {ALL_DAYS.map((day) => {
+                  const active = scheduleForm.daysOfWeek.includes(day);
+                  return (
+                    <button
+                      className={`h-8 rounded-full px-3 text-xs font-semibold transition ${
+                        active
+                          ? 'bg-[#10673d] text-white'
+                          : 'border border-[#dfe6df] bg-white text-[#66746b] hover:bg-[#f1faf4]'
+                      }`}
+                      key={day}
+                      onClick={() =>
+                        setScheduleForm((form) => ({
+                          ...form,
+                          daysOfWeek: active
+                            ? form.daysOfWeek.filter((d) => d !== day)
+                            : [...form.daysOfWeek, day],
+                        }))
+                      }
+                      type="button"
+                    >
+                      {DAY_LABELS[day]}
+                    </button>
+                  );
+                })}
+                <button
+                  className="h-8 rounded-full border border-[#dfe6df] bg-white px-3 text-xs font-semibold text-[#66746b] transition hover:bg-[#f1faf4]"
+                  onClick={() => setScheduleForm((form) => ({ ...form, daysOfWeek: [...ALL_DAYS] }))}
+                  type="button"
+                >
+                  Todos
+                </button>
+                <button
+                  className="h-8 rounded-full border border-[#dfe6df] bg-white px-3 text-xs font-semibold text-[#66746b] transition hover:bg-[#f1faf4]"
+                  onClick={() =>
+                    setScheduleForm((form) => ({
+                      ...form,
+                      daysOfWeek: form.daysOfWeek.filter(
+                        (d) => d !== 'SAT' && d !== 'SUN'
+                      ),
+                    }))
+                  }
+                  type="button"
+                >
+                  Seg–Sex
+                </button>
+                <button
+                  className="h-8 rounded-full border border-[#dfe6df] bg-white px-3 text-xs font-semibold text-[#66746b] transition hover:bg-[#f1faf4]"
+                  onClick={() =>
+                    setScheduleForm((form) => ({
+                      ...form,
+                      daysOfWeek: form.daysOfWeek.filter(
+                        (d) => d === 'SAT' || d === 'SUN'
+                      ),
+                    }))
+                  }
+                  type="button"
+                >
+                  Fim de semana
+                </button>
+              </div>
+            </form>
+
+            {createScheduleMutation.isError ? (
+              <p className="mb-3 text-sm text-red-600">Não foi possível criar o agendamento.</p>
+            ) : null}
+
+            <div className="grid gap-2">
+              {schedulesQuery.isLoading ? (
+                <p className="text-sm text-[#7d8b83]">Carregando…</p>
+              ) : (schedulesQuery.data ?? []).length === 0 ? (
+                <p className="rounded-xl border border-dashed border-[#cad4ca] p-4 text-center text-sm text-[#7d8b83]">
+                  Nenhum agendamento cadastrado.
+                </p>
+              ) : (
+                (schedulesQuery.data ?? []).map((schedule) => {
+                  const appLabel =
+                    allApps.find((a) => a.packageName === schedule.packageName)?.appName ??
+                    schedule.packageName;
+                  return (
+                    <div
+                      className="flex flex-col gap-2 rounded-xl border border-[#e8ece8] bg-white p-3 sm:flex-row sm:items-center sm:justify-between"
+                      key={schedule.id}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-[#06120c]">
+                          {appLabel}
+                        </p>
+                        <p
+                          className="truncate text-xs font-normal text-[#7d8b83]"
+                          title={schedule.packageName}
+                        >
+                          {schedule.packageName}
+                        </p>
+                        <p className="text-xs text-[#5c6b62]">
+                          {schedule.startTime} → {schedule.endTime} ·{' '}
+                          {formatDaysOfWeek(schedule.daysOfWeek)}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                            schedule.enabled ? 'bg-[#10673d]' : 'bg-[#d7ded7]'
+                          }`}
+                          disabled={toggleScheduleMutation.isPending}
+                          onClick={() =>
+                            toggleScheduleMutation.mutate({
+                              scheduleId: schedule.id,
+                              enabled: !schedule.enabled,
+                            })
+                          }
+                          role="switch"
+                          aria-checked={schedule.enabled}
+                          type="button"
+                        >
+                          <span
+                            className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${
+                              schedule.enabled ? 'translate-x-[22px]' : 'translate-x-[2px]'
+                            }`}
+                          />
+                        </button>
+                        <button
+                          aria-label="Remover agendamento"
+                          className="grid h-9 w-9 place-items-center rounded-full border border-red-200 bg-white text-red-600 transition hover:bg-red-50 disabled:opacity-60"
+                          disabled={deleteScheduleMutation.isPending}
+                          onClick={() => {
+                            if (confirm(`Remover o agendamento de ${appLabel}?`)) {
+                              deleteScheduleMutation.mutate(schedule.id);
+                            }
+                          }}
+                          type="button"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </Panel>
+          </>
         ) : null}
 
         {activeTab === 'history' ? (
